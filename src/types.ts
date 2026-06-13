@@ -1,3 +1,25 @@
+export interface JumpServerConfig {
+  host: string;
+  port: number;
+  user: string;
+  authType?: 'PASSWORD' | 'PUBLIC_KEY';
+  privateKeyPath?: string;
+  passphrase?: string;
+}
+
+export interface SshTunnelConfig {
+  host: string;
+  port: number;
+  user: string;
+  authType?: 'PASSWORD' | 'PUBLIC_KEY' | 'AGENT';
+  password?: string;
+  privateKeyPath?: string;
+  passphrase?: string;
+  keepAliveInterval?: number;
+  connectTimeout?: number;
+  jumpServer?: JumpServerConfig;
+}
+
 export interface DatabaseConnection {
   id: string;
   name: string;
@@ -12,6 +34,7 @@ export interface DatabaseConnection {
   readonly?: boolean;
   folder?: string;
   properties?: Record<string, string>;
+  sshTunnel?: SshTunnelConfig;
 }
 
 export interface QueryResult {

@@ -4,7 +4,7 @@ import os from 'os';
 import { parseString } from 'xml2js';
 import { promisify } from 'util';
 import crypto from 'crypto';
-import { DatabaseConnection, WorkspaceConfig } from './types.js';
+import { DatabaseConnection, SshTunnelConfig, WorkspaceConfig } from './types.js';
 
 const parseXML = promisify(parseString);
 
@@ -209,6 +209,49 @@ export class WorkspaceConfigParser {
         connection.host = config.host || config.server || '';
         connection.port = config.port ? parseInt(String(config.port)) : undefined;
         connection.database = config.database || '';
+
+        // Parse SSH tunnel handler
+        const sshHandler = config.handlers?.ssh_tunnel;
+        if (sshHandler?.enabled) {
+          const sshProps = (sshHandler.properties || {}) as Record<string, string | number | boolean>;
+          const str = (v: unknown) => (v != null ? String(v) : undefined);
+          // DBeaver uses 'name' for SSH username (not 'user')
+          const sshUser = str(sshProps.name) || str(sshProps.user) || os.userInfo().username;
+          connection.sshTunnel = {
+            host: str(sshProps.host) || '',
+            port: parseInt(String(sshProps.port || '22')) || 22,
+            user: sshUser,
+            authType: (str(sshProps.authType) as SshTunnelConfig['authType']) || 'PASSWORD',
+            password: str(sshProps.password),
+            privateKeyPath: str(sshProps.keyPath),
+            passphrase: str(sshProps.passphrase),
+            keepAliveInterval: sshProps.keepAliveInterval
+              ? parseInt(String(sshProps.keepAliveInterval))
+              : undefined,
+            connectTimeout: sshProps.connectTimeout
+              ? parseInt(String(sshProps.connectTimeout))
+              : undefined,
+          };
+
+          // Parse ProxyJump config (jumpServer0.* properties)
+          // jumpServer.count is authoritative — ignore stale jumpServer0.* keys when count is 0
+          const jumpCount = parseInt(String(sshProps['jumpServer.count'] || '0')) || 0;
+          const jumpHost = sshProps['jumpServer0.host'];
+          if (jumpCount > 0 && jumpHost && sshProps['jumpServer0.enabled'] !== false) {
+            connection.sshTunnel.jumpServer = {
+              host: str(jumpHost)!,
+              port: parseInt(String(sshProps['jumpServer0.port'] || '22')) || 22,
+              user: str(sshProps['jumpServer0.name']) || str(sshProps['jumpServer0.user']) || 'root',
+              authType: (str(sshProps['jumpServer0.authType']) as 'PASSWORD' | 'PUBLIC_KEY') || 'PUBLIC_KEY',
+              privateKeyPath: str(sshProps['jumpServer0.keyPath']),
+              passphrase: str(sshProps['jumpServer0.passphrase']),
+            };
+            // When jump server user is known, use it as fallback for the final target too
+            if (!sshProps.name && !sshProps.user) {
+              connection.sshTunnel.user = connection.sshTunnel.jumpServer.user;
+            }
+          }
+        }
       }
 
       connections.push(connection);
@@ -263,6 +306,42 @@ export class WorkspaceConfigParser {
         connection.host = properties.host || '';
         connection.port = properties.port ? parseInt(properties.port) : undefined;
         connection.database = properties.database || '';
+      }
+
+      // Extract SSH tunnel handler (old XML format)
+      if (conn.handler) {
+        const handlerArray = Array.isArray(conn.handler) ? conn.handler : [conn.handler];
+        const sshHandler = handlerArray.find(
+          (h: any) => h.$ && h.$.id === 'ssh_tunnel' && h.$.enabled === 'true'
+        );
+        if (sshHandler) {
+          const sshProps: Record<string, string> = {};
+          if (sshHandler.property) {
+            const propArray = Array.isArray(sshHandler.property)
+              ? sshHandler.property
+              : [sshHandler.property];
+            for (const prop of propArray) {
+              if (prop.$ && prop.$.name && prop.$.value) {
+                sshProps[prop.$.name] = prop.$.value;
+              }
+            }
+          }
+          connection.sshTunnel = {
+            host: sshProps.host || '',
+            port: parseInt(sshProps.port || '22') || 22,
+            user: sshProps.user || '',
+            authType: (sshProps.authType as SshTunnelConfig['authType']) || 'PASSWORD',
+            password: sshProps.password || undefined,
+            privateKeyPath: sshProps.keyPath || undefined,
+            passphrase: sshProps.passphrase || undefined,
+            keepAliveInterval: sshProps.keepAliveInterval
+              ? parseInt(sshProps.keepAliveInterval)
+              : undefined,
+            connectTimeout: sshProps.connectTimeout
+              ? parseInt(sshProps.connectTimeout)
+              : undefined,
+          };
+        }
       }
 
       connections.push(connection);
@@ -423,6 +502,13 @@ export class WorkspaceConfigParser {
               }
               connection.properties.password = creds.password;
             }
+          }
+
+          // SSH tunnel credentials (key varies: 'network/ssh_tunnel' in newer DBeaver, '#ssh_tunnel' in older)
+          const sshCreds = (connCreds['network/ssh_tunnel'] ?? connCreds['#ssh_tunnel']) as Record<string, string> | undefined;
+          if (sshCreds && connection.sshTunnel) {
+            if (sshCreds.user) connection.sshTunnel.user = sshCreds.user;
+            if (sshCreds.password) connection.sshTunnel.password = sshCreds.password;
           }
         }
       }

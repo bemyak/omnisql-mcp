@@ -22,6 +22,7 @@ Universal database MCP server — give AI assistants read/write access to your d
 ## Features
 
 - Reuses connections already configured in your local DB client workspace — no duplicate setup
+- SSH tunnel support — connections with an SSH tunnel configured in DBeaver connect through it automatically
 - Native query execution for PostgreSQL, MySQL/MariaDB, SQLite, SQL Server
 - Connection pooling with configurable pool size and timeouts
 - Transaction support (BEGIN/COMMIT/ROLLBACK)
@@ -205,6 +206,8 @@ Supports both configuration formats written by DBeaver-compatible DB clients:
 - Modern: JSON config in `General/.dbeaver/`
 
 Credentials are automatically decrypted from the workspace `credentials-config.json`.
+
+SSH tunnel configuration (`handlers.ssh_tunnel`) is read from the same workspace files and applied transparently — if DBeaver is configured to connect through a bastion host, omnisql-mcp will do the same. Password and public-key auth are supported.
 
 ## Development
 

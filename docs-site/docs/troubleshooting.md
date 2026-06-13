@@ -83,6 +83,15 @@ openssl aes-128-cbc -d \
 - Check if the database server is accessible
 - Ensure firewall settings allow database connections
 
+### SSH Tunnel Issues
+
+SSH tunnels are configured in DBeaver and picked up automatically — there's nothing extra to set in omnisql-mcp. If a tunnelled connection fails:
+
+- **Tunnel not connecting**: Verify the bastion host, port, and credentials work in DBeaver first. Enable debug mode (`OMNISQL_DEBUG=true`) to see `[SshTunnel]` log lines.
+- **Public key auth failing**: Ensure the key file path saved in DBeaver (`keyPath`) is accessible at runtime. The key is read from disk each time a new tunnel is created.
+- **Tunnel drops mid-session**: The tunnel is re-established automatically on the next query. If it keeps dropping, increase `keepAliveInterval` in DBeaver's SSH tunnel settings.
+- **AGENT auth**: SSH agent forwarding is not currently supported. Use PASSWORD or PUBLIC_KEY auth instead.
+
 ## Query Execution Issues
 
 ### Query Syntax Errors

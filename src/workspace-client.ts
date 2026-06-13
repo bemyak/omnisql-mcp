@@ -15,6 +15,7 @@ import {
   ConnectionTest,
   DatabaseStats,
 } from './types.js';
+import { sshTunnelManager } from './ssh-tunnel.js';
 import {
   findCliExecutable,
   getTestQuery,
@@ -172,6 +173,24 @@ export class WorkspaceClient {
       d.includes('neon') ||
       d.includes('citus')
     );
+  }
+
+  private async resolveTunneledAddress(
+    connection: DatabaseConnection,
+    host: string,
+    port: number
+  ): Promise<{ host: string; port: number }> {
+    if (!connection.sshTunnel?.host) {
+      return { host, port };
+    }
+    const tunnelKey = `${connection.id}:${host}:${port}`;
+    const localPort = await sshTunnelManager.getTunnel(
+      tunnelKey,
+      connection.sshTunnel,
+      host,
+      port
+    );
+    return { host: '127.0.0.1', port: localPort };
   }
 
   private async executeWithNativeTool(
@@ -401,7 +420,8 @@ export class WorkspaceClient {
       ssl = false;
     }
 
-    const client = new Client({ host, port, database, user, password, ssl });
+    const resolved = await this.resolveTunneledAddress(connection, host, port);
+    const client = new Client({ host: resolved.host, port: resolved.port, database, user, password, ssl });
     try {
       await client.connect();
       const res = await client.query(query);
@@ -441,12 +461,13 @@ export class WorkspaceClient {
       throw new Error('User and password are required for SQL Server connection');
     }
 
+    const resolved = await this.resolveTunneledAddress(connection, host, port);
     const isAzure = host.includes('.database.windows.net');
     const config = {
       user,
       password,
-      server: host,
-      port,
+      server: resolved.host,
+      port: resolved.port,
       database,
       options: {
         encrypt: isAzure,
@@ -555,10 +576,11 @@ export class WorkspaceClient {
       ssl = undefined;
     }
 
+    const resolved = await this.resolveTunneledAddress(connection, host, port);
     const connectTimeout = Math.max(1000, this.timeout);
     const connectionConfig: mysql.ConnectionOptions = {
-      host,
-      port,
+      host: resolved.host,
+      port: resolved.port,
       user,
       password,
       database,

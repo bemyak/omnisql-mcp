@@ -2,6 +2,7 @@ import { Pool as PgPool } from 'pg';
 import mysql, { Pool as MySqlPool } from 'mysql2/promise';
 import sql, { ConnectionPool as MssqlPool } from 'mssql';
 import { DatabaseConnection, PoolConfig, PoolStats } from '../types.js';
+import { sshTunnelManager } from '../ssh-tunnel.js';
 
 const DEFAULT_POOL_CONFIG: PoolConfig = {
   min: 2,
@@ -60,6 +61,24 @@ export class ConnectionPoolManager {
     }
   }
 
+  private async resolveTunneledAddress(
+    connection: DatabaseConnection,
+    host: string,
+    port: number
+  ): Promise<{ host: string; port: number }> {
+    if (!connection.sshTunnel?.host) {
+      return { host, port };
+    }
+    const tunnelKey = `${connection.id}:${host}:${port}`;
+    const localPort = await sshTunnelManager.getTunnel(
+      tunnelKey,
+      connection.sshTunnel,
+      host,
+      port
+    );
+    return { host: '127.0.0.1', port: localPort };
+  }
+
   private async createPool(connection: DatabaseConnection): Promise<PoolEntry | null> {
     const driver = connection.driver.toLowerCase();
 
@@ -103,10 +122,15 @@ export class ConnectionPoolManager {
     this.log(`Creating PostgreSQL pool for ${connection.name}`);
 
     const sslConfig = this.getPostgresSslConfig(connection);
+    const resolved = await this.resolveTunneledAddress(
+      connection,
+      connection.host || 'localhost',
+      connection.port || 5432
+    );
 
     const pool = new PgPool({
-      host: connection.host,
-      port: connection.port || 5432,
+      host: resolved.host,
+      port: resolved.port,
       database: connection.database,
       user: connection.user,
       password: connection.properties?.password,
@@ -169,9 +193,14 @@ export class ConnectionPoolManager {
   private async createMysqlPool(connection: DatabaseConnection): Promise<PoolEntry> {
     this.log(`Creating MySQL pool for ${connection.name}`);
 
+    const resolved = await this.resolveTunneledAddress(
+      connection,
+      connection.host || 'localhost',
+      connection.port || 3306
+    );
     const pool = mysql.createPool({
-      host: connection.host,
-      port: connection.port || 3306,
+      host: resolved.host,
+      port: resolved.port,
       database: connection.database,
       user: connection.user,
       password: connection.properties?.password,
@@ -197,10 +226,15 @@ export class ConnectionPoolManager {
 
     const host = connection.host || 'localhost';
     const isAzure = host.includes('.database.windows.net');
+    const resolved = await this.resolveTunneledAddress(
+      connection,
+      host,
+      connection.port || 1433
+    );
 
     const pool = new sql.ConnectionPool({
-      server: host,
-      port: connection.port || 1433,
+      server: resolved.host,
+      port: resolved.port,
       database: connection.database,
       user: connection.user,
       password: connection.properties?.password,
