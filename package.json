@@ -1,6 +1,6 @@
 {
   "name": "omnisql-mcp",
-  "version": "2.0.1",
+  "version": "2.1.0",
   "description": "Universal database MCP server — native drivers for PostgreSQL, MySQL, SQLite, SQL Server with CLI fallback, reading connections from your local DB client workspace",
   "main": "dist/index.js",
   "type": "module",
@@ -86,6 +86,7 @@
     "@types/ssh2": "^1.15.5",
     "@types/xml2js": "^0.4.14",
     "@vitest/coverage-v8": "^4.0.17",
+    "bumpp": "^11.1.0",
     "eslint": "^9.39.2",
     "husky": "^9.1.7",
     "lint-staged": "^16.2.7",
