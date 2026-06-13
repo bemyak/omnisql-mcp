@@ -1,6 +1,6 @@
 {
   "name": "@bemyak/omnisql-mcp",
-  "version": "2.1.0",
+  "version": "2.1.1",
   "description": "Universal database MCP server — native drivers for PostgreSQL, MySQL, SQLite, SQL Server with CLI fallback, reading connections from your local DB client workspace",
   "main": "dist/index.js",
   "type": "module",
